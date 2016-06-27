@@ -1,17 +1,69 @@
 package com.github.christophpickl.liquibase_launch4j_bug;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.util.LinkedList;
+import java.util.List;
+
+import liquibase.Contexts;
+import liquibase.LabelExpression;
+import liquibase.Liquibase;
+import liquibase.database.Database;
+import liquibase.database.DatabaseFactory;
+import liquibase.database.jvm.JdbcConnection;
+import liquibase.resource.ClassLoaderResourceAccessor;
+import org.hsqldb.jdbc.JDBCDataSource;
+
 public class App {
 
-    public static void main(String[] args) {
-        System.out.println("App START");
+    public static void main(String[] args) throws Exception {
+        try {
+            log("App START");
+            log("=========================");
 
-        /*
-        val database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(JdbcConnection(dataSource.connection))
-        log.trace("liquibase database product: {}, version: {}, short name: {}", database.databaseProductName, database.databaseProductVersion, database.shortName)
+            log("Connecting to HSQLDB ...");
+            JDBCDataSource dataSource = new JDBCDataSource();
+            dataSource.setUrl("jdbc:hsqldb:mem:mymemdb");
+            dataSource.setUser("SA");
+            log("Connecting to HSQLDB ... DONE");
 
-        val liquibase = Liquibase(CHANGELOG, ClassLoaderResourceAccessor(), database)
-        liquibase.update(Contexts(), LabelExpression())
-         */
-        System.out.println("App END");
+            log("Establishing liquibase connection ...");
+            Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(dataSource.getConnection()));
+
+            // when executing in IDE or as fatJar:
+            // "database product: HSQL Database Engine, version: 2.3.4, shortname: hsqldb"
+
+            // when executed as an EXE wrapped by launch4j:
+            // "database product: HSQL Database Engine, version: 2.3.4, shortname: unsupported"
+
+            log(String.format("database product: %s, version: %s, shortname: %s",
+                database.getDatabaseProductName(), database.getDatabaseProductVersion(), database.getShortName()));
+            log("Establishing liquibase connection ... DONE");
+
+            Liquibase liquibase = new Liquibase("liquibase_changelog.sql", new ClassLoaderResourceAccessor(), database);
+            log("Migrating database via liquibase ...");
+            liquibase.update(new Contexts(), new LabelExpression());
+            log("Migrating database via liquibase ... DONE");
+
+            log("Closing database connection ...");
+            dataSource.getConnection().close();
+            log("Closing database connection ... DONE");
+
+            log("=========================");
+            log("App END");
+        } finally {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter("log.log"))) {
+                for (String log : logBuffer) {
+                    writer.write(log + "\n");
+                }
+            }
+        }
     }
+
+    private static final List<String> logBuffer = new LinkedList<>();
+    private static void log(String message) {
+        System.out.println(message);
+        logBuffer.add(message);
+    }
+
 }
