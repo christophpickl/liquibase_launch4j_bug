@@ -10,8 +10,12 @@ import liquibase.LabelExpression;
 import liquibase.Liquibase;
 import liquibase.database.Database;
 import liquibase.database.DatabaseFactory;
+import liquibase.database.core.HsqlDatabase;
 import liquibase.database.jvm.JdbcConnection;
+import liquibase.lockservice.LockServiceFactory;
+import liquibase.lockservice.StandardLockService;
 import liquibase.resource.ClassLoaderResourceAccessor;
+import liquibase.servicelocator.ServiceLocator;
 import org.hsqldb.jdbc.JDBCDataSource;
 
 public class App {
@@ -21,11 +25,25 @@ public class App {
             log("App START");
             log("=========================");
 
+            List<String> packages = ServiceLocator.getInstance().getPackages();
+            log("Packages to scan: " + packages.size()); // IDE: 17, EXE: 17 (so they are the same, something else must be wrong here)
+            for (String packagee : packages) {
+                log("Liquibase package scan: " + packagee);
+            }
+
             log("Connecting to HSQLDB ...");
             JDBCDataSource dataSource = new JDBCDataSource();
             dataSource.setUrl("jdbc:hsqldb:mem:mymemdb");
             dataSource.setUser("SA");
             log("Connecting to HSQLDB ... DONE");
+
+
+            if (DatabaseFactory.getInstance().getDatabase("hsqldb") == null) {
+                log("Registering HSQLDB manually.");
+                HsqlDatabase hsqlDatabase = new HsqlDatabase();
+                DatabaseFactory.getInstance().register(hsqlDatabase);
+                LockServiceFactory.getInstance().register(new StandardLockService());
+            }
 
             log("Establishing liquibase connection ...");
             Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(dataSource.getConnection()));
@@ -36,9 +54,37 @@ public class App {
             // when executed as an EXE wrapped by launch4j:
             // "database product: HSQL Database Engine, version: 2.3.4, shortname: unsupported"
 
-            log(String.format("database product: %s, version: %s, shortname: %s",
-                database.getDatabaseProductName(), database.getDatabaseProductVersion(), database.getShortName()));
+            log(String.format("database product: %s, version: %s, shortname: %s (%s)",
+                database.getDatabaseProductName(), database.getDatabaseProductVersion(), database.getShortName(), database.getClass().getName()));
             log("Establishing liquibase connection ... DONE");
+
+            List<Database> implementedDatabases = DatabaseFactory.getInstance().getImplementedDatabases();
+            log("Number of implemented databases: " + implementedDatabases.size());
+            for (Database db : implementedDatabases) {
+                log("Registered implemented database: " + db.getClass().getSimpleName());
+                /*
+                in IDE returns:
+                Number of implemented databases: 15
+                Registered implemented database: SybaseDatabase
+                Registered implemented database: FirebirdDatabase
+                Registered implemented database: OracleDatabase
+                Registered implemented database: SQLiteDatabase
+                Registered implemented database: HsqlDatabase
+                Registered implemented database: H2Database
+                Registered implemented database: MariaDBDatabase
+                Registered implemented database: InformixDatabase
+                Registered implemented database: UnsupportedDatabase
+                Registered implemented database: PostgresDatabase
+                Registered implemented database: DB2Database
+                Registered implemented database: SybaseASADatabase
+                Registered implemented database: DerbyDatabase
+                Registered implemented database: MySQLDatabase
+                Registered implemented database: MSSQLDatabase
+
+                as EXE returns:
+                Number of implemented databases: 0
+                */
+            }
 
             Liquibase liquibase = new Liquibase("liquibase_changelog.sql", new ClassLoaderResourceAccessor(), database);
             log("Migrating database via liquibase ...");
